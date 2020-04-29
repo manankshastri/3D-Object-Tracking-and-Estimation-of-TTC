@@ -120,7 +120,8 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 
     // display image
     string windowName = "3D Objects";
-    cv::namedWindow(windowName, 1);
+    cv::namedWindow(windowName, 0);
+    cv::resizeWindow(windowName, 800, 800);
     cv::imshow(windowName, topviewImg);
 
     if(bWait)
@@ -131,9 +132,38 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 
 
 // associate a given bounding box with the keypoints it contains
-void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
-{
-    // ...
+void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches) {
+
+    std::vector<double> euclideanDistance;
+
+    for(auto it1 = kptMatches.begin(); it1 != kptMatches.end(); ++it1) {
+        auto currentKeypoint = kptsCurr[it1->trainIdx];
+
+        if(boundingBox.roi.contains(currentKeypoint.pt)) {
+            auto previousKeypoint = kptsPrev[it1->queryIdx];
+
+            euclideanDistance.push_back(cv::norm(currentKeypoint.pt - previousKeypoint.pt));
+        }
+    }
+
+    double distanceMean = std::accumulate(euclideanDistance.begin(), euclideanDistance.end(), 0.0) / euclideanDistance.size();
+
+    for(auto it2 = kptMatches.begin(); it2 != kptMatches.end(); ++it2) {
+        auto currentKeypoint = kptsCurr[it2->trainIdx];
+
+        if(boundingBox.roi.contains(currentKeypoint.pt)) {
+            auto previousKeypoint = kptsPrev[it2->queryIdx];
+
+            double kptDistance = cv::norm(currentKeypoint.pt - previousKeypoint.pt);
+            double distanceTolerance = distanceMean * 1.2;
+
+            if(kptDistance < distanceTolerance) {
+                boundingBox.kptMatches.push_back(*it2);
+            }
+        }
+    }
+
+    // std::cout<<"Size After: "<<boundingBox.kptMatches.size()<<endl;
 }
 
 
@@ -145,14 +175,167 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
 }
 
 
-void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
-                     std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
-{
-    // ...
+void clusterHelper(int indice, const std::vector<std::vector<float>> points, std::vector<int> &cluster, std::vector<bool> &processed, KdTree* tree, float distanceTol) {
+
+    processed[indice] = true;
+    cluster.push_back(indice);
+
+    std::vector<int> nearest = tree->search(points[indice], distanceTol);
+
+    for (int id : nearest) {
+
+        if (!processed[id])
+            clusterHelper(id, points, cluster, processed, tree, distanceTol);
+    }
+}
+
+std::vector<std::vector<int>> euclideanCluster(const std::vector<std::vector<float>>& points, KdTree* tree, float distanceTol) {
+
+    std::vector<std::vector<int>> clusters;
+    std::vector<bool> processed (points.size(), false);
+
+    int i = 0;
+    while(i < points.size()) {
+
+        if (processed[i]) {
+          i++;
+          continue;
+        }
+
+        std::vector<int> cluster;
+        clusterHelper(i, points, cluster, processed, tree, distanceTol);
+
+        clusters.push_back(cluster);
+        i++;
+    }
+
+    return clusters;
 }
 
 
-void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
-{
-    // ...
+
+std::vector<LidarPoint> removeOutliers(const std::vector<LidarPoint> &lidarPoints, float distanceTol) {
+
+
+    KdTree* tree = new KdTree;
+
+    // int i = 0;
+    std::vector<std::vector<float>> points;
+
+    // for(int i = 0; i<lidarPoints.size(); i++) {
+    //     std::vector<float> lidarP {static_cast<float>(lidarPoints[i].x), static_cast<float>(lidarPoints[i].y), static_cast<float>(lidarPoints[i].z)};
+    //     tree->insert(lidarP, i);
+    //     points.push_back(lidarP);
+    // }
+
+    int i = 0;
+    for(auto point : lidarPoints) {
+        std::vector<float> lidarP {static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z)};
+        tree->insert(lidarP, i++);
+        points.push_back(lidarP);
+    }
+
+    std::vector<std::vector<int>> clusters = euclideanCluster(points, tree, distanceTol);
+
+    std::vector<LidarPoint> finalLidar;
+    for(auto cluster : clusters) {
+        std::vector<LidarPoint> temp;
+        for(auto indice : cluster) {
+            temp.push_back(lidarPoints[indice]);
+        }
+
+        if(temp.size() > finalLidar.size()) {
+            finalLidar = std::move(temp);
+        }
+    }
+
+    //cout<<"Cluster Size: "<<finalLidar.size()<<endl;
+    return finalLidar;
+}
+
+void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC) {
+
+
+    double laneWidth = 4.0; // assume width of ego lane
+
+    // find closest distance to LiDAR Points within ego lane
+    double minXPrev = 1e9, minXCurr = 1e9;
+    float distanceTol = 0.1;
+
+    vector<LidarPoint> newlidarPointsPrev = removeOutliers(lidarPointsPrev, distanceTol);
+    vector<LidarPoint> newlidarPointsCurr = removeOutliers(lidarPointsCurr, distanceTol);
+
+    for(auto it = newlidarPointsPrev.begin(); it != newlidarPointsPrev.end(); ++it) {
+        if(abs(it->y) <= laneWidth / 2.0) {
+            //3D point within ego lane
+            minXPrev = minXPrev > it->x ? it->x : minXPrev;
+        }
+    }
+
+    for(auto it1 = newlidarPointsCurr.begin(); it1 != newlidarPointsCurr.end(); ++it1) {
+        if(abs(it1->y <= laneWidth / 2.0)) {
+            // 3D point within ego lane
+            minXCurr = minXCurr > it1->x ? it1->x : minXCurr;
+        }
+    }
+
+    // compute TTC from both measurements
+    TTC = (minXCurr * (1.0 / frameRate)) / (minXPrev - minXCurr);
+    cout<<"TTC: "<<TTC<<endl;
+}
+
+
+void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame) {
+    
+    for(auto itr1 = prevFrame.boundingBoxes.begin(); itr1!= prevFrame.boundingBoxes.end(); ++itr1){
+
+        vector<vector<cv::DMatch>::iterator> E;
+
+        for(auto itr2 = matches.begin(); itr2 != matches.end(); ++itr2) {
+
+            int prevFrameKptIdx = itr2->queryIdx;
+
+            if(itr1->roi.contains(prevFrame.keypoints.at(prevFrameKptIdx).pt)) {
+
+                E.push_back(itr2);
+                // cout<<"pushed!!"<<endl;
+            }
+        }
+
+        multimap<int, int> F1;
+
+        for(auto itr3 = E.begin(); itr3 != E.end(); ++itr3) {
+
+            int currFrameKptIdx = (*itr3)->trainIdx;
+
+            for(auto itr4 = currFrame.boundingBoxes.begin(); itr4 != currFrame.boundingBoxes.end(); ++itr4) {
+
+                if(itr4->roi.contains(currFrame.keypoints.at(currFrameKptIdx).pt)) {
+
+                    int currBoxID = itr4->boxID;
+
+                    F1.insert(pair<int, int>(currBoxID, currFrameKptIdx));
+                    // cout<<"inserted!!!"<<endl;
+                }
+            }
+        }
+
+        int max = 0;
+        int currFrameBoxID = 10000;
+
+        if(F1.size() > 0) {
+            for(auto itr5 = F1.begin(); itr5 != F1.end(); ++itr5) {
+
+                if(F1.count(itr5->first) > max) {
+
+                    max = F1.count(itr5->first);
+                    currFrameBoxID = itr5->first;
+                    // cout<<"done!!!"<<endl;
+                }
+            }
+
+            bbBestMatches.insert(pair<int, int>(itr1->boxID, currFrameBoxID));
+            // cout<<"inserted!!"<<endl;
+        }
+    }
 }
