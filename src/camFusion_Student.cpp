@@ -11,14 +11,12 @@ using namespace std;
 
 
 // Create groups of Lidar points whose projection into the camera falls into the same bounding box
-void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT)
-{
+void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT) {
     // loop over all Lidar points and associate them to a 2D bounding box
     cv::Mat X(4, 1, cv::DataType<double>::type);
     cv::Mat Y(3, 1, cv::DataType<double>::type);
 
-    for (auto it1 = lidarPoints.begin(); it1 != lidarPoints.end(); ++it1)
-    {
+    for (auto it1 = lidarPoints.begin(); it1 != lidarPoints.end(); ++it1) {
         // assemble vector for matrix-vector-multiplication
         X.at<double>(0, 0) = it1->x;
         X.at<double>(1, 0) = it1->y;
@@ -32,8 +30,7 @@ void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<Li
         pt.y = Y.at<double>(1, 0) / Y.at<double>(0, 2);
 
         vector<vector<BoundingBox>::iterator> enclosingBoxes; // pointers to all bounding boxes which enclose the current Lidar point
-        for (vector<BoundingBox>::iterator it2 = boundingBoxes.begin(); it2 != boundingBoxes.end(); ++it2)
-        {
+        for (vector<BoundingBox>::iterator it2 = boundingBoxes.begin(); it2 != boundingBoxes.end(); ++it2) {
             // shrink current bounding box slightly to avoid having too many outlier points around the edges
             cv::Rect smallerBox;
             smallerBox.x = (*it2).roi.x + shrinkFactor * (*it2).roi.width / 2.0;
@@ -41,32 +38,27 @@ void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<Li
             smallerBox.width = (*it2).roi.width * (1 - shrinkFactor);
             smallerBox.height = (*it2).roi.height * (1 - shrinkFactor);
 
-            // check wether point is within current bounding box
-            if (smallerBox.contains(pt))
-            {
+            // check whether point is within current bounding box
+            if (smallerBox.contains(pt)) {
                 enclosingBoxes.push_back(it2);
             }
 
         } // eof loop over all bounding boxes
 
-        // check wether point has been enclosed by one or by multiple boxes
-        if (enclosingBoxes.size() == 1)
-        { 
+        // check whether point has been enclosed by one or by multiple boxes
+        if (enclosingBoxes.size() == 1) { 
             // add Lidar point to bounding box
             enclosingBoxes[0]->lidarPoints.push_back(*it1);
         }
-
     } // eof loop over all Lidar points
 }
 
 
-void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, cv::Size imageSize, bool bWait)
-{
+void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, cv::Size imageSize, bool bWait) {
     // create topview image
     cv::Mat topviewImg(imageSize, CV_8UC3, cv::Scalar(255, 255, 255));
 
-    for(auto it1=boundingBoxes.begin(); it1!=boundingBoxes.end(); ++it1)
-    {
+    for(auto it1=boundingBoxes.begin(); it1!=boundingBoxes.end(); ++it1) {
         // create randomized color for current 3D object
         cv::RNG rng(it1->boxID);
         cv::Scalar currColor = cv::Scalar(rng.uniform(0,150), rng.uniform(0, 150), rng.uniform(0, 150));
@@ -74,8 +66,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
         // plot Lidar points into top view image
         int top=1e8, left=1e8, bottom=0.0, right=0.0; 
         float xwmin=1e8, ywmin=1e8, ywmax=-1e8;
-        for (auto it2 = it1->lidarPoints.begin(); it2 != it1->lidarPoints.end(); ++it2)
-        {
+        for (auto it2 = it1->lidarPoints.begin(); it2 != it1->lidarPoints.end(); ++it2) {
             // world coordinates
             float xw = (*it2).x; // world position in m with x facing forward from sensor
             float yw = (*it2).y; // world position in m with y facing left from sensor
@@ -111,8 +102,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
     // plot distance markers
     float lineSpacing = 2.0; // gap between distance markers
     int nMarkers = floor(worldSize.height / lineSpacing);
-    for (size_t i = 0; i < nMarkers; ++i)
-    {
+    for (size_t i = 0; i < nMarkers; ++i) {
         int y = (-(i * lineSpacing) * imageSize.height / worldSize.height) + imageSize.height;
         cv::line(topviewImg, cv::Point(0, y), cv::Point(imageSize.width, y), cv::Scalar(255, 0, 0));
     }
@@ -123,8 +113,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
     cv::resizeWindow(windowName, 800, 800);
     cv::imshow(windowName, topviewImg);
 
-    if(bWait)
-    {
+    if(bWait) {
         cv::waitKey(0); // wait for key to be pressed
     }
 }
@@ -259,7 +248,6 @@ std::vector<std::vector<int>> euclideanCluster(const std::vector<std::vector<flo
 
 std::vector<LidarPoint> removeOutliers(const std::vector<LidarPoint> &lidarPoints, float distanceTol) {
 
-
     KdTree* tree = new KdTree;
 
     std::vector<std::vector<float>> points;
@@ -315,7 +303,6 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
     // finding the median of the distances
     // sorting into ascending order
     if (xPrev.size() > 0) {
-        // minXPrev = std::accumulate(xprev.begin(), xprev.end(), 0.0) / xprev.size();
         std::sort(xPrev.begin(), xPrev.end());
         long medIndex = floor(xPrev.size() / 2.0);
 
@@ -323,7 +310,6 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev, std::vector<Lidar
     }
 
     if(xCurr.size() > 0) {
-        // minXCurr = std::accumulate(xcurr.begin(), xcurr.end(), 0.0) / xcurr.size();
         std::sort(xCurr.begin(), xCurr.end());
         long medIndex = floor(xCurr.size() / 2.0);
 
@@ -353,7 +339,6 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
                 // pushing the keypoint matches 
                 keypointMatches.push_back(itr2);
-                // cout<<"pushed!!"<<endl;
             }
         }
 
@@ -377,7 +362,6 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
 
                     // pushing the bounding box id and also the current frame keypoint index
                     currentFrameAll.insert(pair<int, int>(currBoxID, currFrameKptIdx));
-                    // cout<<"inserted!!!"<<endl;
                 }
             }
         }
@@ -394,13 +378,11 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
                     // storing the maximum count of the bounding box
                     max = currentFrameAll.count(itr5->first);
                     currFrameBoxID = itr5->first;
-                    // cout<<"done!!!"<<endl;
                 }
             }
 
             // storing the previous frame bounding box id and its corresponding current frame bounding box id
             bbBestMatches.insert(pair<int, int>(itr1->boxID, currFrameBoxID));
-            // cout<<"inserted!!"<<endl;
         }
     }
 }
