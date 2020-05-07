@@ -2,6 +2,10 @@
 
 <img src="images/course_code_structure.png" width="779" height="414" />
 
+## Result
+
+![ttc-output](/results/ttc-output.gif)*(SIFT/FREAK)*
+
 Ther are four major tasks: 
 1. First, we will develop a way to match 3D objects over time by using keypoint correspondences. 
 2. Second, we will compute the TTC based on Lidar measurements. 
