@@ -176,13 +176,12 @@ int main(int argc, const char *argv[]) {
 
         // optional : limit number of keypoints (helpful for debugging and learning)
         bool bLimitKpts = false;
-        if (bLimitKpts)
-        {
+        if (bLimitKpts) {
             int maxKeypoints = 50;
 
             if (detectorType.compare("SHITOMASI") == 0) {
-              // there is no response info, so keep the first 50 as they are sorted in descending quality order
-              keypoints.erase(keypoints.begin() + maxKeypoints, keypoints.end());
+                // there is no response info, so keep the first 50 as they are sorted in descending quality order
+                keypoints.erase(keypoints.begin() + maxKeypoints, keypoints.end());
             }
             cv::KeyPointsFilter::retainBest(keypoints, maxKeypoints);
             cout << " NOTE: Keypoints have been limited!" << endl;
@@ -250,13 +249,15 @@ int main(int argc, const char *argv[]) {
                 // find bounding boxes associates with current match
                 BoundingBox *prevBB, *currBB;
                 for (auto it2 = (dataBuffer.end() - 1)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 1)->boundingBoxes.end(); ++it2) {
-                    if (it1->second == it2->boxID) // check whether current match partner corresponds to this BB {
+                    // check whether current match partner corresponds to this BB
+                    if (it1->second == it2->boxID) {
                         currBB = &(*it2);
                     }
                 }
 
                 for (auto it2 = (dataBuffer.end() - 2)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 2)->boundingBoxes.end(); ++it2) {
-                    if (it1->first == it2->boxID) // check whether current match partner corresponds to this BB {
+                    // check whether current match partner corresponds to this BB 
+                    if (it1->first == it2->boxID) {
                         prevBB = &(*it2);
                     }
                 }
@@ -279,7 +280,8 @@ int main(int argc, const char *argv[]) {
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                     //// EOF STUDENT ASSIGNMENT
 
-                    cout<<"Difference: "<<ttcLidar - ttcCamera<<endl;
+                    cout<<"TTC Difference: "<<ttcLidar - ttcCamera<<endl;
+
                     bVis = true;
                     if (bVis) {
                         cv::Mat visImg = (dataBuffer.end() - 1)->cameraImg.clone();
