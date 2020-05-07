@@ -23,8 +23,7 @@
 using namespace std;
 
 /* MAIN PROGRAM */
-int main(int argc, const char *argv[])
-{
+int main(int argc, const char *argv[]) {
     /* INIT VARIABLES AND DATA STRUCTURES */
 
     // data location
@@ -90,19 +89,30 @@ int main(int argc, const char *argv[])
         // push image into data frame buffer
         DataFrame frame;
         frame.cameraImg = img;
-        dataBuffer.push_back(frame);
+        // dataBuffer.push_back(frame);
 
-        cout << "#1 : LOAD IMAGE INTO BUFFER done" << endl;
+        if (dataBuffer.size() < dataBufferSize) {
+            dataBuffer.push_back(frame);
+            cout<<"Pushed a new image.."<<endl;
+        }
+        else {
+            dataBuffer.erase(dataBuffer.begin());
+            dataBuffer.push_back(frame);
+            cout<<"Removed the oldest image.."<<endl;
+        }
+
+        cout<<"#1 : LOAD IMAGE INTO BUFFER done"<<endl;
 
 
         /* DETECT & CLASSIFY OBJECTS */
 
         float confThreshold = 0.2;
         float nmsThreshold = 0.4;
+
         detectObjects((dataBuffer.end() - 1)->cameraImg, (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
                       yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis);
 
-        cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
+        cout<<"#2 : DETECT & CLASSIFY OBJECTS done"<<endl;
 
 
         /* CROP LIDAR POINTS */
@@ -118,7 +128,7 @@ int main(int argc, const char *argv[])
 
         (dataBuffer.end() - 1)->lidarPoints = lidarPoints;
 
-        cout << "#3 : CROP LIDAR POINTS done" << endl;
+        cout<<"#3 : CROP LIDAR POINTS done"<<endl;
 
 
         /* CLUSTER LIDAR POINT CLOUD */
@@ -134,7 +144,7 @@ int main(int argc, const char *argv[])
         }
         bVis = false;
 
-        cout << "#4 : CLUSTER LIDAR POINT CLOUD done" << endl;
+        cout<<"#4 : CLUSTER LIDAR POINT CLOUD done"<<endl;
 
 
         // REMOVE THIS LINE BEFORE PROCEEDING WITH THE FINAL PROJECT
@@ -148,10 +158,10 @@ int main(int argc, const char *argv[])
 
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
-        string detectorType = "SHITOMASI";
+        string detectorType = "SIFT";
 
         if (detectorType.compare("SHITOMASI") == 0) {
-            detKeypointsShiTomasi(keypoints, imgGray, false);
+            detKeypointsShiTomasi(keypoints, imgGray, true);
         }
         else if (detectorType.compare("HARRIS") == 0) {
             detKeypointsHarris(keypoints, imgGray, true);
@@ -170,9 +180,9 @@ int main(int argc, const char *argv[])
         {
             int maxKeypoints = 50;
 
-            if (detectorType.compare("SHITOMASI") == 0)
-            { // there is no response info, so keep the first 50 as they are sorted in descending quality order
-                keypoints.erase(keypoints.begin() + maxKeypoints, keypoints.end());
+            if (detectorType.compare("SHITOMASI") == 0) {
+              // there is no response info, so keep the first 50 as they are sorted in descending quality order
+              keypoints.erase(keypoints.begin() + maxKeypoints, keypoints.end());
             }
             cv::KeyPointsFilter::retainBest(keypoints, maxKeypoints);
             cout << " NOTE: Keypoints have been limited!" << endl;
@@ -181,19 +191,19 @@ int main(int argc, const char *argv[])
         // push keypoints and descriptor for current frame to end of data buffer
         (dataBuffer.end() - 1)->keypoints = keypoints;
 
-        cout << "#5 : DETECT KEYPOINTS done" << endl;
+        cout<<"#5 : DETECT KEYPOINTS done"<<endl;
 
 
         /* EXTRACT KEYPOINT DESCRIPTORS */
 
         cv::Mat descriptors;
-        string descriptorType = "BRISK"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
+        string descriptorType = "FREAK"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
         descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
 
         // push descriptors for current frame to end of data buffer
         (dataBuffer.end() - 1)->descriptors = descriptors;
 
-        cout << "#6 : EXTRACT DESCRIPTORS done" << endl;
+        cout<<"#6 : EXTRACT DESCRIPTORS done"<<endl;
 
         // wait until at least two images have been processed
         if (dataBuffer.size() > 1) {
@@ -202,17 +212,17 @@ int main(int argc, const char *argv[])
 
             vector<cv::DMatch> matches;
             string matcherType = "MAT_BF";        // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
+            string descriptorType1 = "DES_BINARY"; // DES_BINARY, DES_HOG
             string selectorType = "SEL_NN";       // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
                              (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
-                             matches, descriptorType, matcherType, selectorType);
+                             matches, descriptorType1, matcherType, selectorType);
 
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
 
-            cout << "#7 : MATCH KEYPOINT DESCRIPTORS done" << endl;
+            cout<<"#7 : MATCH KEYPOINT DESCRIPTORS done"<<endl;
 
 
             /* TRACK 3D OBJECT BOUNDING BOXES */
@@ -220,54 +230,45 @@ int main(int argc, const char *argv[])
             //// STUDENT ASSIGNMENT
             //// TASK FP.1 -> match list of 3D objects (vector<BoundingBox>) between current and previous frame (implement ->matchBoundingBoxes)
             map<int, int> bbBestMatches;
-            matchBoundingBoxes(matches, bbBestMatches, *(dataBuffer.end()-2), *(dataBuffer.end()-1)); // associate bounding boxes between current and previous frame using keypoint matches
+
+            // associate bounding boxes between current and previous frame using keypoint matches
+            matchBoundingBoxes(matches, bbBestMatches, *(dataBuffer.end()-2), *(dataBuffer.end()-1));
             //// EOF STUDENT ASSIGNMENT
 
-            // for(auto bb : bbBestMatches) {
-            //     cout<<"first: "<<bb.first<<" second: "<<bb.second<<endl;
-            // }
             // store matches in current data frame
             (dataBuffer.end()-1)->bbMatches = bbBestMatches;
 
-            cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done" << endl;
+            cout<<"#8 : TRACK 3D OBJECT BOUNDING BOXES done"<<endl;
             // cout<<"size : "<<bbBestMatches.size()<<endl;
 
 
             /* COMPUTE TTC ON OBJECT IN FRONT */
 
             // loop over all BB match pairs
-            for (auto it1 = (dataBuffer.end() - 1)->bbMatches.begin(); it1 != (dataBuffer.end() - 1)->bbMatches.end(); ++it1)
-            {
+            for (auto it1 = (dataBuffer.end() - 1)->bbMatches.begin(); it1 != (dataBuffer.end() - 1)->bbMatches.end(); ++it1) {
+
                 // find bounding boxes associates with current match
                 BoundingBox *prevBB, *currBB;
-                for (auto it2 = (dataBuffer.end() - 1)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 1)->boundingBoxes.end(); ++it2)
-                {
-                    if (it1->second == it2->boxID) // check whether current match partner corresponds to this BB
-                    {
+                for (auto it2 = (dataBuffer.end() - 1)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 1)->boundingBoxes.end(); ++it2) {
+                    if (it1->second == it2->boxID) // check whether current match partner corresponds to this BB {
                         currBB = &(*it2);
-                        // cout<<"current match partner corresponds to this BB 1"<<endl;
                     }
                 }
 
-                for (auto it2 = (dataBuffer.end() - 2)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 2)->boundingBoxes.end(); ++it2)
-                {
-                    if (it1->first == it2->boxID) // check whether current match partner corresponds to this BB
-                    {
+                for (auto it2 = (dataBuffer.end() - 2)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 2)->boundingBoxes.end(); ++it2) {
+                    if (it1->first == it2->boxID) // check whether current match partner corresponds to this BB {
                         prevBB = &(*it2);
-                        // cout<<"current match partner corresponds to this BB 2"<<endl;
                     }
                 }
-
-                // cout<<"currsize: "<<currBB->lidarPoints.size()<<endl;
-                // cout<<"prevsize: "<<prevBB->lidarPoints.size()<<endl;
 
                 // compute TTC for current match
-                if( currBB->lidarPoints.size()>0 && prevBB->lidarPoints.size()>0 ) // only compute TTC if we have Lidar points
-                {
+                // only compute TTC if we have Lidar points
+                if( currBB->lidarPoints.size()>0 && prevBB->lidarPoints.size()>0 ) {
                     //// STUDENT ASSIGNMENT
                     //// TASK FP.2 -> compute time-to-collision based on Lidar data (implement -> computeTTCLidar)
                     double ttcLidar;
                     computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
+
                     //// EOF STUDENT ASSIGNMENT
 
                     //// STUDENT ASSIGNMENT
@@ -278,9 +279,9 @@ int main(int argc, const char *argv[])
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                     //// EOF STUDENT ASSIGNMENT
 
+                    cout<<"Difference: "<<ttcLidar - ttcCamera<<endl;
                     bVis = true;
-                    if (bVis)
-                    {
+                    if (bVis) {
                         cv::Mat visImg = (dataBuffer.end() - 1)->cameraImg.clone();
                         showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
                         cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height), cv::Scalar(0, 255, 0), 2);
@@ -296,14 +297,10 @@ int main(int argc, const char *argv[])
                         cv::waitKey(0);
                     }
                     bVis = false;
-
                 } // eof TTC computation
             } // eof loop over all BB matches
-
         }
         cout<<"\n************\n";
-
     } // eof loop over all images
-
     return 0;
 }
