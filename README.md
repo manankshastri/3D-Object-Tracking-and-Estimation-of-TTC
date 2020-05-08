@@ -1,4 +1,4 @@
-# SFND 3D Object Tracking
+# 3D Object Tracking and Estimation of Time-To-Collision
 
 <img src="images/course_code_structure.png" width="779" height="414" />
 
